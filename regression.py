@@ -19,33 +19,8 @@ class LinearRegression():
     return self.__add_bias(X) @ self.theta
   
 
-class BatchGradientDescentRegression():
-    def __init__(self, n_iter, lr, seed = None) -> None:
-        self.n_iter = n_iter
-        self.lr = lr
-        if seed is not None:
-            np.random.seed = seed
-
-    def __add_bias(self, X):
-        return np.concatenate((X,  np.expand_dims(np.ones(X.T.shape[-1]), axis=1)),axis=1)
-  
-    def fit(self, X, y):
-        X_b = self.__add_bias(X)
-        self.theta = np.random.rand(X_b.shape[1], 1)
-        m = len(X_b)
-        for i in range(self.n_iter):
-            mse = (2/m) * X_b.T @ (X_b @ self.theta - y)
-            self.theta = self.theta - self.lr * mse
-
-        self.intercept_ = self.theta[0]
-        self.coef_ = self.theta[1:]
-
-    def predict(self, X):
-        return self.__add_bias(X) @ self.theta
-    
-
 class SGDRegression():
-    def __init__(self, n_iter, lr0, lr1,eta0, seed = None, penalty="", alpha = None) -> None:
+    def __init__(self, n_iter, eta0, seed = None, penalty="", alpha = None, r=None, lr0=None, lr1=None) -> None:
         self.n_iter = n_iter
         self.penalty = penalty
         self.lr0 = lr0
@@ -53,9 +28,15 @@ class SGDRegression():
         self.eta0 = eta0
         assert not ((penalty == "") and (alpha != None)), "Alpha must be none, when penalty is empty"
         self.alpha = alpha
+        if (penalty == "elastic") and (r == None):
+           raise Exception("r value for elastic net is None")
+        if (penalty == "elastic") and ((r >= 1) or (r < 0)):
+           raise Exception("r must be (r <= 1)  (r > 0)")
+        self.r = r
 
         if seed is not None:
             self.rng = np.random.default_rng(seed=seed)
+
 
     def __add_bias(self, X):
         return np.c_[np.ones((X.T.shape[-1],1)), X]
@@ -67,9 +48,15 @@ class SGDRegression():
         #optimal_init = 1.0 / (self.eta0 * m)
         return 1 / (t + self.eta0)
 
-    def fit(self, X, y):
+    def fit(self, X:np.ndarray, y):
         X_b = self.__add_bias(X)
+        #X_b = X.copy()
+       
         self.theta = self.rng.standard_normal((X_b.shape[1], 1))
+
+        # self.coef_ = self.rng.standard_normal((X_b.shape[1] - 1, 1))
+        # self.intercept_ = self.rng.standard_normal((1, 1))
+
         m = len(X_b)
 
         for epoch in range(self.n_iter):
@@ -77,17 +64,28 @@ class SGDRegression():
                 sample_index =  self.rng.integers(m)
                 Xi = X_b[sample_index: sample_index+1]
                 yi = y[sample_index: sample_index+1]
-                
-                if self.penalty == "":
-                    gradient = 2 * Xi.T @ (Xi @ self.theta - yi)
-                elif self.penalty == "l1":
-                    gradient = 2 * Xi.T @ (Xi @ self.theta - yi) + (self.alpha / m) * np.sum(self.theta)
+
+                if self.penalty == "l1":
+                    l1 = self.alpha * np.sign(self.theta)
+                    l1[0] = 0
+                    gradient = 2 * Xi.T @ (Xi @ self.theta - yi) + l1
+
                 elif self.penalty == "l2":
-                    gradient = 2 * Xi.T @ (Xi @ self.theta - yi) + (2*self.alpha) * np.sum(np.square(self.theta ))
+                    l2 = 2 * self.alpha * self.theta
+                    l2[0] = 0
+                    gradient = 2 * Xi.T @ (Xi @ self.theta - yi) + l2
+
+                elif self.penalty == "elastic":
+                    l1 = self.alpha * np.sign(self.theta)
+                    l1[0] = 0
+                    l2 = 2 * self.alpha * self.theta
+                    l2[0] = 0
+
+                    gradient = 2 * Xi.T @ (Xi @ self.theta - yi) + self.r * l1 + (1-self.r) * l2
 
                 eta = self.learning_schedule_optimal(epoch * m + iteration + 1)
 
-                self.theta = self.theta - eta * gradient
+                self.theta -= eta * gradient
 
 
         self.intercept_ = self.theta[0]
