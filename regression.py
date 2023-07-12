@@ -1,4 +1,5 @@
 import numpy as np
+from utils import sigmoid
 
 class LinearRegression():
   def __init__(self) -> None:
@@ -149,3 +150,55 @@ class Ridge():
     
   def predict(self, X):
     return self.__add_bias(X) @ self.theta
+  
+
+
+
+class LogisticRegression():
+    def __init__(self, n_iter, eta0, seed = None) -> None:
+        self.n_iter = n_iter
+        self.eta0 = eta0
+        
+        if seed is not None:
+            self.rng = np.random.default_rng(seed=seed)
+        else:
+            self.rng = np.random.default_rng()
+    
+    def learning_schedule_optimal(self, t):
+        return 1 / (t + self.eta0)
+    
+    def __add_bias(self, X):
+        return np.c_[np.ones((X.T.shape[-1],1)), X]
+  
+
+    def fit(self, X, y):
+
+        X_b = self.__add_bias(X)
+
+        self.theta = self.rng.standard_normal((X_b.shape[1], 1))
+
+        m = len(X_b)
+
+        for epoch in range(self.n_iter):
+            for iteration in range(m):
+                sample_index =  self.rng.integers(m)
+                Xi = X_b[sample_index: sample_index+1]
+                yi = y[sample_index: sample_index+1]
+
+                gradient = 2 * Xi.T @ (sigmoid(Xi @ self.theta) - yi)
+
+                eta = self.learning_schedule_optimal(epoch * m + iteration + 1)
+
+                self.theta -= eta * gradient
+
+        self.intercept_ = self.theta[0]
+        self.coef_ = self.theta[1:].T
+
+    def predict(self, X):
+        pred = self.predict_proba(X)
+        return np.where(pred > 0.5, 1, 0)
+    
+
+    def predict_proba(self, X):
+        return sigmoid(self.__add_bias(X) @ self.theta)
+    
